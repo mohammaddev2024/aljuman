@@ -157,6 +157,7 @@ class PersianMagazine {
 
             window.addEventListener('dataManager:articlesUpdated', (e) => {
                 if (this.currentSection === 'home') this.loadArticles();
+                if (this.currentSection === 'favorites') this.loadFavorites();
                 this.updateFavoritesCount();
             });
 
@@ -584,7 +585,7 @@ class PersianMagazine {
         let imgSrc = resolvedAuthorPhoto;
         try {
             if (resolvedAuthorPhoto && !/^data:/i.test(resolvedAuthorPhoto) && resolvedAuthorPhoto.startsWith(window.location.origin)) {
-                imgSrc = resolvedAuthorPhoto + '?v=' + (article._photoVersion || Date.now());
+                imgSrc = resolvedAuthorPhoto + '?v=' + (article._photoVersion || article.id || Date.now());
             }
         } catch (e) { imgSrc = resolvedAuthorPhoto; }
 
@@ -653,12 +654,20 @@ class PersianMagazine {
         const authorCandidate = this.getAuthorPhotoFromArticle(article) || article.authorPhoto || article.author_photo || '';
         const authorImg = this.normalizeAuthorPhoto(authorCandidate);
 
+        // Add cache buster for modal image too
+        let modalImgSrc = authorImg;
+        try {
+            if (authorImg && !/^data:/i.test(authorImg) && authorImg.startsWith(window.location.origin)) {
+                modalImgSrc = authorImg + '?v=' + (article._photoVersion || article.id || Date.now());
+            }
+        } catch (e) { modalImgSrc = authorImg; }
+
         // Build modal content dynamically so we can omit the image when not available
         const headerHtml = `
             <div class="modal-article-header">
                 <h1 class="modal-article-title">${article.title}</h1>
                 <div class="modal-article-meta">
-                ${authorImg ? `<img src="${authorImg}" alt="${article.author}" class="author-avatar">` : ''}
+                ${modalImgSrc ? `<img src="${modalImgSrc}" alt="${article.author}" class="author-avatar">` : ''}
                     <div class="author-info">
                         <h4>${article.author}</h4>
                         <span class="article-date">${formattedDate}</span>

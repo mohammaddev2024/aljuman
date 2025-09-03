@@ -52,12 +52,16 @@ class DataManager {
         const newArticle = {
             id: Date.now().toString(),
             ...articleData,
+            _photoVersion: Date.now(), // for cache busting
             excerpt: this.generateExcerpt(articleData.content, 200),
             createdAt: new Date().toISOString()
         };
         
         this.articles.unshift(newArticle);
         this.saveArticles();
+
+        // Notify UI to refresh
+        this.notifyUpdate('articles');
 
         // Background sync to server
         try {
@@ -108,12 +112,20 @@ class DataManager {
                 }
             });
 
+            // Add photo version for cache busting when author photo changes
+            if (updatedData.authorPhoto && updatedData.authorPhoto !== existing.authorPhoto) {
+                updated._photoVersion = Date.now();
+            }
+
             // Recompute excerpt if content changed
             updated.excerpt = updated.content ? this.generateExcerpt(updated.content, 200) : existing.excerpt;
 
             // Replace single index (no shared references)
             this.articles[index] = updated;
             this.saveArticles();
+
+            // Notify UI to refresh
+            this.notifyUpdate('articles');
 
             console.debug('DataManager.updateArticle:', { id, updatedAuthorPhoto: updated.authorPhoto, index });
 
