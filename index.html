@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>مجله فرهنگی نور</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="container">
+            <div class="header-content">
+                <div class="logo-section">
+                    <img src="https://images.pexels.com/photos/159711/books-bookstore-book-reading-159711.jpeg?auto=compress&cs=tinysrgb&w=60" alt="لوگو" class="logo-img">
+                    <div class="logo-text">
+                        <h1>مجله فرهنگی نور</h1>
+                        <span class="tagline">روشنایی دانش و فرهنگ</span>
+                    </div>
+                </div>
+                
+                <nav class="nav desktop-nav">
+                    <ul class="nav-list">
+                        <li><a href="#home" data-section="home" class="nav-link active">خانه</a></li>
+                        <li><a href="#editorial" data-section="editorial" class="nav-link">هیئت تحریریه</a></li>
+                        <li><a href="#contact" data-section="contact" class="nav-link">تماس با ما</a></li>
+                        <!-- آرشیو مجله به بخش داخلی متصل شد -->
+                        <li><a href="#magazine" data-section="magazine" class="nav-link">آرشیو مجله</a></li>
+                    </ul>
+                </nav>
+
+                <div class="header-controls">
+                    <div class="search-container">
+                        <input type="text" id="searchInput" placeholder="جستجو در مقالات...">
+                        <i class="fas fa-search search-icon"></i>
+                    </div>
+                    <button id="darkModeToggle" class="theme-toggle">
+                        <i class="fas fa-moon"></i>
+                    </button>
+                    <button class="mobile-menu-toggle" id="mobileMenuToggle">
+                        <i class="fas fa-bars"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Mobile Sidebar -->
+    <div class="mobile-sidebar" id="mobileSidebar">
+        <div class="sidebar-header">
+            <h3>منو</h3>
+            <button class="sidebar-close" id="sidebarClose">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <nav class="sidebar-nav">
+            <ul class="sidebar-nav-list">
+                <li><a href="#home" data-section="home" class="sidebar-nav-link active">خانه</a></li>
+                <li><a href="#editorial" data-section="editorial" class="sidebar-nav-link">هیئت تحریریه</a></li>
+                <li><a href="#contact" data-section="contact" class="sidebar-nav-link">تماس با ما</a></li>
+                <li><a href="#magazine" data-section="magazine" class="sidebar-nav-link">آرشیو مجله</a></li>
+            </ul>
+        </nav>
+    </div>
+
+    <!-- Mobile Sidebar Overlay -->
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <!-- Main Content -->
+    <main class="main">
+        <div class="container">
+            <!-- Hero Banner -->
+            <section class="hero-banner">
+                <div class="hero-content">
+                    <h1 class="hero-title">مجله فرهنگی نور</h1>
+                    <p class="hero-subtitle">روشنایی دانش و فرهنگ در دنیای مدرن</p>
+                </div>
+                <div class="hero-overlay"></div>
+            </section>
+
+            <!-- Home Section -->
+            <div id="homeSection" class="content-section active">
+                <!-- Category Filter -->
+                <section class="category-filter">
+                    <div class="filter-buttons">
+                        <button class="filter-btn active" data-category="all">همه مقالات</button>
+                        <button class="filter-btn" data-category="technology">فناوری</button>
+                        <button class="filter-btn" data-category="art">هنر</button>
+                        <button class="filter-btn" data-category="culture">فرهنگ</button>
+                        <button class="filter-btn" data-category="science">علم</button>
+                        <button class="favorites-filter-btn" id="favoritesFilterBtn">
+                            <i class="fas fa-heart"></i>
+                            علاقه‌مندی‌ها
+                            <span class="favorites-count">0</span>
+                        </button>
+                    </div>
+                </section>
+
+                <!-- Articles Grid -->
+                <section class="articles-grid" id="articlesGrid">
+                    <!-- Articles will be dynamically loaded here -->
+                </section>
+
+                <!-- Loading Spinner -->
+                <div class="loading" id="loading">
+                    <div class="spinner"></div>
+                    <p>در حال بارگذاری...</p>
+                </div>
+
+                <!-- Empty State -->
+                <div class="empty-state" id="emptyState" style="display: none;">
+                    <i class="fas fa-search"></i>
+                    <h3>هیچ مقاله‌ای یافت نشد</h3>
+                    <p>لطفاً کلمات کلیدی دیگری امتحان کنید یا فیلترها را تغییر دهید</p>
+                </div>
+            </div>
+
+            <!-- Editorial Section -->
+            <div id="editorialSection" class="content-section">
+                <div class="section-header">
+                    <h2>هیئت تحریریه</h2>
+                    <p>آشنایی با تیم تحریریه و اهداف مجله</p>
+                </div>
+                
+                <div class="editorial-content">
+                    <div class="mission-section">
+                        <h3>ماموریت ما</h3>
+                        <p>مجله فرهنگی نور با هدف ارائه محتوای باکیفیت و آموزنده در حوزه‌های مختلف فرهنگی، هنری، علمی و فناوری فعالیت می‌کند. ما بر آنیم تا پلی میان دانش و جامعه باشیم.</p>
+                        
+                        <h3>چشم‌انداز</h3>
+                        <p>تبدیل شدن به مرجع اصلی محتوای فارسی در حوزه‌های تخصصی و ایجاد بستری برای تبادل دانش و تجربه میان علاقه‌مندان.</p>
+                    </div>
+                    
+                    <div class="team-section">
+                        <h3>تیم تحریریه</h3>
+                        <div class="team-grid">
+                            <div class="team-member">
+                                <img src="https://images.pexels.com/photos/2379005/pexels-photo-2379005.jpeg?auto=compress&cs=tinysrgb&w=200" alt="سردبیر">
+                                <h4>دکتر احمد محمدی</h4>
+                                <p>سردبیر</p>
+                                <span>دکترای ادبیات فارسی</span>
+                            </div>
+                            <div class="team-member">
+                                <img src="https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=200" alt="مدیر محتوا">
+                                <h4>مریم حسینی</h4>
+                                <p>مدیر محتوا</p>
+                                <span>کارشناس ارشد روزنامه‌نگاری</span>
+                            </div>
+                            <div class="team-member">
+                                <img src="https://images.pexels.com/photos/1043471/pexels-photo-1043471.jpeg?auto=compress&cs=tinysrgb&w=200" alt="ویراستار">
+                                <h4>علی رضایی</h4>
+                                <p>ویراستار ارشد</p>
+                                <span>کارشناس زبان و ادبیات فارسی</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Submit Article Section -->
+            <div id="submitSection" class="content-section">
+                <div class="section-header">
+                    <h2>ارسال مقاله</h2>
+                    <p>مقاله خود را برای بررسی و انتشار ارسال کنید</p>
+                </div>
+                
+                <div class="submit-form-container">
+                    <form class="submit-form" id="submitForm">
+                        <div class="form-group">
+                            <label for="submitTitle">عنوان مقاله *</label>
+                            <input type="text" id="submitTitle" required>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="submitAuthor">نام نویسنده *</label>
+                                <input type="text" id="submitAuthor" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="submitEmail">ایمیل *</label>
+                                <input type="email" id="submitEmail" required>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="submitCategory">دسته‌بندی *</label>
+                            <select id="submitCategory" required>
+                                <option value="">انتخاب کنید</option>
+                                <option value="technology">فناوری</option>
+                                <option value="art">هنر</option>
+                                <option value="culture">فرهنگ</option>
+                                <option value="science">علم</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="submitContent">متن کامل مقاله *</label>
+                            <textarea id="submitContent" rows="10" required placeholder="متن کامل مقاله را اینجا بنویسید"></textarea>
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="submit" class="submit-btn">
+                                <i class="fas fa-paper-plane"></i>
+                                ارسال مقاله
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Contact Section -->
+            <div id="contactSection" class="content-section">
+                <div class="section-header">
+                    <h2>تماس با ما</h2>
+                    <p>راه‌های ارتباط با تیم تحریریه مجله</p>
+                </div>
+                
+                <div class="contact-content">
+                    <div class="contact-info">
+                        <div class="contact-item">
+                            <i class="fas fa-envelope"></i>
+                            <div>
+                                <h4>ایمیل</h4>
+                                <p id="contactEmail">info@noormagazine.ir</p>
+                            </div>
+                        </div>
+                        <div class="contact-item">
+                            <i class="fas fa-phone"></i>
+                            <div>
+                                <h4>تلفن</h4>
+                                <p id="contactPhone">021-12345678</p>
+                            </div>
+                        </div>
+                        <div class="contact-item">
+                            <i class="fas fa-map-marker-alt"></i>
+                            <div>
+                                <h4>آدرس</h4>
+                                <p id="contactAddress">تهران، خیابان ولیعصر، پلاک ۱۲۳</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="social-section">
+                        <h3>شبکه‌های اجتماعی</h3>
+                        <div class="social-links">
+                            <a href="#" aria-label="تلگرام"><i class="fab fa-telegram"></i></a>
+                            <a href="#" aria-label="اینستاگرام"><i class="fab fa-instagram"></i></a>
+                            <a href="#" aria-label="توییتر"><i class="fab fa-twitter"></i></a>
+                            <a href="#" aria-label="لینکدین"><i class="fab fa-linkedin"></i></a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Favorites Section -->
+            <div id="favoritesSection" class="content-section">
+                <div class="section-header">
+                    <h2>مقالات علاقه‌مندی</h2>
+                    <p>مقالاتی که برای مطالعه بعدی ذخیره کرده‌اید</p>
+                </div>
+                <div class="articles-grid" id="favoritesGrid">
+                    <!-- Favorite articles will be loaded here -->
+                </div>
+                <div class="empty-state" id="favoritesEmptyState">
+                    <i class="fas fa-heart-broken"></i>
+                    <h3>هنوز مقاله‌ای به علاقه‌مندی‌ها اضافه نکرده‌اید</h3>
+                    <p>با کلیک بر روی آیکون قلب در مقالات، آنها را به لیست علاقه‌مندی‌هایتان اضافه کنید</p>
+                </div>
+            </div>
+
+            <!-- Magazine Archive Section -->
+            <div id="magazineSection" class="content-section">
+                <div class="section-header">
+                    <h2>آرشیو مجله</h2>
+                    <p>دانلود نسخه‌های PDF مجله فرهنگی نور</p>
+                    <!-- add button removed from public archive; admin should use admin panel -->
+                </div>
+                
+                <div class="magazine-grid" id="magazineGrid">
+                    <!-- Magazine issues will be loaded here -->
+                </div>
+                
+                <div class="empty-state" id="magazineEmptyState">
+                    <i class="fas fa-book-open"></i>
+                    <h3>هنوز شماره‌ای از مجله منتشر نشده</h3>
+                    <p>به زودی اولین شماره مجله منتشر خواهد شد</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Article Modal -->
+    <div class="modal-overlay" id="articleModal">
+        <div class="modal">
+            <div class="modal-header">
+                <button class="modal-close" id="modalClose">
+                    <i class="fas fa-times"></i>
+                </button>
+                <div class="modal-actions">
+                    <button class="action-btn" id="shareBtn">
+                        <i class="fas fa-share-alt"></i>
+                        اشتراک‌گذاری
+                    </button>
+                    <button class="action-btn favorite-btn" id="favoriteBtn">
+                        <i class="far fa-heart"></i>
+                        علاقه‌مندی
+                    </button>
+                </div>
+            </div>
+            <div class="modal-content" id="modalContent">
+                <!-- Article content will be loaded here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Magazine Modal -->
+    <div class="modal-overlay" id="magazineModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>افزودن شماره جدید مجله</h3>
+                <button class="modal-close" id="magazineModalClose">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-content">
+                <form id="magazineForm" class="magazine-form">
+                    <div class="form-group">
+                        <label for="magazineTitle">عنوان شماره</label>
+                        <input type="text" id="magazineTitle" required placeholder="مثال: شماره ۱ - بهمن ۱۴۰۳">
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="magazineMonth">ماه</label>
+                            <select id="magazineMonth" required>
+                                <option value="">انتخاب کنید</option>
+                                <option value="1">فروردین</option>
+                                <option value="2">اردیبهشت</option>
+                                <option value="3">خرداد</option>
+                                <option value="4">تیر</option>
+                                <option value="5">مرداد</option>
+                                <option value="6">شهریور</option>
+                                <option value="7">مهر</option>
+                                <option value="8">آبان</option>
+                                <option value="9">آذر</option>
+                                <option value="10">دی</option>
+                                <option value="11">بهمن</option>
+                                <option value="12">اسفند</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="magazineYear">سال</label>
+                            <input type="number" id="magazineYear" required min="1400" max="1450" value="1403">
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="magazineDescription">توضیحات</label>
+                        <textarea id="magazineDescription" rows="3" placeholder="توضیح کوتاهی از محتوای این شماره"></textarea>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="magazineCover">آدرس تصویر جلد</label>
+                        <input type="url" id="magazineCover" placeholder="https://example.com/cover.jpg">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="magazinePdf">آدرس فایل PDF</label>
+                        <input type="url" id="magazinePdf" required placeholder="https://example.com/magazine.pdf">
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button type="submit" class="submit-btn">ذخیره شماره</button>
+                        <button type="button" class="cancel-btn" onclick="closeMagazineModal()">انصراف</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Admin Login Modal -->
+    <div class="modal-overlay" id="adminLoginModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>ورود مدیر</h3>
+                <button class="modal-close" id="adminLoginClose">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-content">
+                <form id="adminLoginForm" class="login-form">
+                    <div class="form-group">
+                        <label for="adminUsername">نام کاربری</label>
+                        <input type="text" id="adminUsername" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="adminPassword">رمز عبور</label>
+                        <input type="password" id="adminPassword" required>
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button type="submit" class="submit-btn">ورود</button>
+                        <button type="button" class="cancel-btn" onclick="closeAdminLoginModal()">انصراف</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <h3>درباره ما</h3>
+                    <p>مجله فرهنگی نور مجموعه‌ای از بهترین مقالات فرهنگی و علمی را برای شما فراهم می‌کند</p>
+                </div>
+                <div class="footer-section">
+                    <h3>دسته‌بندی‌ها</h3>
+                    <ul>
+                        <li><a href="#tech">فناوری</a></li>
+                        <li><a href="#art">هنر</a></li>
+                        <li><a href="#culture">فرهنگ</a></li>
+                        <li><a href="#science">علم</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h3>تماس با ما</h3>
+                    <div class="social-links">
+                        <a href="#" aria-label="تلگرام"><i class="fab fa-telegram"></i></a>
+                        <a href="#" aria-label="اینستاگرام"><i class="fab fa-instagram"></i></a>
+                        <a href="#" aria-label="توییتر"><i class="fab fa-twitter"></i></a>
+                        <a href="#" aria-label="لینکدین"><i class="fab fa-linkedin"></i></a>
+                    </div>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; ۱۴۰۳ مجله فرهنگی نور. تمامی حقوق محفوظ است.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="js/data.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>

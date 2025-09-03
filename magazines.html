@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>آرشیو مجلات - مجله فرهنگی نور</title>
+    <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/admin.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <header class="header">
+        <div class="container">
+            <div class="header-content">
+                <div class="logo-section">
+                    <a href="index.html"><img src="https://images.pexels.com/photos/159711/books-bookstore-book-reading-159711.jpeg?auto=compress&cs=tinysrgb&w=60" alt="لوگو" class="logo-img"></a>
+                    <div class="logo-text">
+                        <h1>آرشیو مجلات</h1>
+                        <span class="tagline">دانلود نسخه‌های PDF مجله فرهنگی نور</span>
+                    </div>
+                </div>
+                <nav class="nav desktop-nav">
+                    <ul class="nav-list">
+                        <li><a href="index.html" class="nav-link">خانه</a></li>
+                        <li><a href="magazines.html" class="nav-link active">آرشیو مجله</a></li>
+                    </ul>
+                </nav>
+            </div>
+        </div>
+    </header>
+
+    <main class="main">
+        <div class="container">
+            <section class="content-section active">
+                <div class="section-header">
+                    <h2>آرشیو مجلات</h2>
+                    <p>لیست شماره‌های منتشر شده — روی دانلود کلیک کنید تا PDF را باز یا ذخیره کنید</p>
+                </div>
+
+                <div class="magazine-grid" id="magazinesGrid">
+                    <!-- magazine cards will be rendered here -->
+                </div>
+
+                <div class="empty-state" id="magazineEmptyState" style="display:none; text-align:center; padding:40px;">
+                    <i class="fas fa-book-open" style="font-size:3rem; opacity:0.6;"></i>
+                    <h3 style="margin-top:1rem;">هنوز شماره‌ای از مجله منتشر نشده</h3>
+                    <p>به زودی اولین شماره منتشر خواهد شد</p>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-bottom">
+                <p>&copy; ۱۴۰۳ مجله فرهنگی نور</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="js/data.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            const magazinesGrid = document.getElementById('magazinesGrid');
+            const emptyState = document.getElementById('magazineEmptyState');
+            const defaultCover = 'https://images.pexels.com/photos/159711/books-bookstore-book-reading-159711.jpeg?auto=compress&cs=tinysrgb&w=400';
+
+            // Try server first
+            let magazines = [];
+            try {
+                const res = await fetch('api/magazines.php');
+                if (res.ok) {
+                    const json = await res.json();
+                    if (Array.isArray(json) && json.length > 0) magazines = json;
+                }
+            } catch (e) {
+                console.warn('خطا در دریافت لیست مجلات از سرور:', e);
+            }
+
+            // Fallback to local dataManager
+            if ((!magazines || magazines.length === 0) && window.dataManager) {
+                magazines = window.dataManager.getAllMagazines();
+            }
+
+            if (!magazines || magazines.length === 0) {
+                emptyState.style.display = 'block';
+                return;
+            }
+
+            magazinesGrid.innerHTML = '';
+
+            magazines.forEach(magazine => {
+                const card = document.createElement('div');
+                card.className = 'magazine-card';
+
+                const monthName = (window.dataManager && window.dataManager.getMonthName) ? window.dataManager.getMonthName(magazine.month || magazine.month_number) : '';
+                const coverImage = magazine.coverImage || magazine.cover_image || (magazine.cover || '') || defaultCover;
+                const pdfUrl = magazine.pdfUrl || magazine.pdf_url || magazine.pdf || '';
+
+                // sanitize pdfUrl: allow http(s) or root-relative or data: otherwise treat empty
+                const validPdf = (typeof pdfUrl === 'string' && pdfUrl.trim().length > 0 && (pdfUrl.startsWith('http') || pdfUrl.startsWith('/') || pdfUrl.startsWith('data:')));
+
+                // create elements to avoid innerHTML injection issues
+                const img = document.createElement('img');
+                img.className = 'magazine-cover';
+                img.loading = 'lazy';
+                img.alt = magazine.title || 'مجله';
+                img.src = coverImage || defaultCover;
+                img.onerror = function() { this.onerror = null; this.src = defaultCover; };
+
+                const info = document.createElement('div');
+                info.className = 'magazine-info';
+
+                const title = document.createElement('h3');
+                title.className = 'magazine-title';
+                title.textContent = magazine.title || 'بدون عنوان';
+
+                const date = document.createElement('p');
+                date.className = 'magazine-date';
+                date.textContent = `${monthName} ${magazine.year || ''}`.trim();
+
+                const desc = document.createElement('p');
+                desc.className = 'magazine-description';
+                desc.textContent = magazine.description || '';
+
+                const actions = document.createElement('div');
+                actions.className = 'magazine-actions';
+
+                if (validPdf) {
+                    const a = document.createElement('a');
+                    a.className = 'download-btn';
+                    a.href = pdfUrl;
+                    a.target = '_blank';
+                    a.rel = 'noopener noreferrer';
+                    a.innerHTML = '<i class="fas fa-download"></i> دانلود PDF';
+                    actions.appendChild(a);
+                } else {
+                    const btn = document.createElement('button');
+                    btn.className = 'download-btn';
+                    btn.disabled = true;
+                    btn.style.opacity = '0.6';
+                    btn.style.cursor = 'default';
+                    btn.textContent = 'PDF موجود نیست';
+                    actions.appendChild(btn);
+                }
+
+                info.appendChild(title);
+                info.appendChild(date);
+                info.appendChild(desc);
+                info.appendChild(actions);
+
+                card.appendChild(img);
+                card.appendChild(info);
+
+                magazinesGrid.appendChild(card);
+            });
+        });
+    </script>
+</body>
+</html>

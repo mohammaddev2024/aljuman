@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ورود مدیر - مجله فرهنگی نور</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .login-container { max-width: 420px; margin: 80px auto; padding: 24px; border: 1px solid #e0e0e0; border-radius: 8px; background: #fff; }
+    .login-container h2 { text-align: center; margin-bottom: 12px; }
+    #loginMessage { margin-top: 12px; text-align: center; color: #b00020; }
+    .success { color: #0a8f3a; }
+  </style>
+</head>
+<body>
+  <div class="login-container">
+    <h2>ورود مدیر</h2>
+    <form id="loginForm">
+      <div class="form-group">
+        <label for="username">نام کاربری</label>
+        <input type="text" id="username" required>
+      </div>
+      <div class="form-group">
+        <label for="password">رمز عبور</label>
+        <input type="password" id="password" required>
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="submit-btn">ورود</button>
+      </div>
+      <div id="loginMessage"></div>
+    </form>
+  </div>
+
+  <script>
+    async function syncServerData() {
+      try {
+        const [artsRes, magsRes, settingsRes, favsRes] = await Promise.all([
+          fetch('api/articles.php', { credentials: 'same-origin' }),
+          fetch('api/magazines.php', { credentials: 'same-origin' }),
+          fetch('api/settings.php', { credentials: 'same-origin' }),
+          fetch('api/favorites.php', { credentials: 'same-origin' })
+        ]);
+
+        // Articles
+        if (artsRes.ok) {
+          const serverArticles = await artsRes.json();
+          if (Array.isArray(serverArticles) && serverArticles.length > 0) {
+            const articles = serverArticles.map(r => ({
+              id: String(r.id),
+              title: r.title || '',
+              author: r.author || '',
+              authorPhoto: r.author_photo || r.authorPhoto || '',
+              category: r.category || '',
+              tags: (r.tags_json ? JSON.parse(r.tags_json) : (r.tags || [])),
+              content: r.content || '',
+              excerpt: r.excerpt || '',
+              createdAt: r.created_at || r.createdAt || new Date().toISOString()
+            }));
+            localStorage.setItem('persianMagazineArticles', JSON.stringify(articles));
+          } else {
+            console.warn('سرور مقالات را خالی بازگرداند — از دادهٔ محلی محافظت شد');
+          }
+        }
+
+        // Magazines
+        if (magsRes.ok) {
+          const serverMags = await magsRes.json();
+          if (Array.isArray(serverMags) && serverMags.length > 0) {
+            const magazines = serverMags.map(m => ({
+              id: String(m.id),
+              title: m.title || '',
+              month: m.month || null,
+              year: m.year || null,
+              description: m.description || '',
+              coverImage: m.cover_image || m.coverImage || '',
+              pdfUrl: m.pdf_url || m.pdfUrl || '',
+              createdAt: m.created_at || m.createdAt || new Date().toISOString()
+            }));
+            localStorage.setItem('persianMagazineMagazines', JSON.stringify(magazines));
+          } else {
+            console.warn('سرور مجلات را خالی بازگرداند — از دادهٔ محلی محافظت شد');
+          }
+        }
+
+        // Settings
+        if (settingsRes.ok) {
+          const s = await settingsRes.json();
+          if (s && Object.keys(s).length > 0) {
+            const settings = {
+              siteName: s.site_name || s.siteName || 'مجله فرهنگی نور',
+              tagline: s.tagline || s.taglineText || '',
+              logoUrl: s.logo_url || s.logoUrl || '',
+              phone: s.phone || '',
+              email: s.email || '',
+              social: (s.social_json ? JSON.parse(s.social_json) : (s.social || {})),
+              footerText: s.footer_text || s.footerText || ''
+            };
+            localStorage.setItem('persianMagazineSettings', JSON.stringify(settings));
+          } else {
+            console.warn('سرور تنظیمات خالی یا نا‌مشخص بازگرداند — از دادهٔ محلی محافظت شد');
+          }
+        }
+
+        // Favorites
+        if (favsRes.ok) {
+          const serverFavs = await favsRes.json();
+          if (Array.isArray(serverFavs) && serverFavs.length > 0) {
+            const favorites = serverFavs.map(id => String(id));
+            localStorage.setItem('persianMagazineFavorites', JSON.stringify(favorites));
+          } else {
+            console.warn('سرور علاقه‌مندی‌ها را خالی بازگرداند — از دادهٔ محلی محافظت شد');
+          }
+        }
+      } catch (e) {
+        console.warn('خطا در همگام‌سازی داده‌های سرور:', e);
+      }
+    }
+
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const username = document.getElementById('username').value;
+      const password = document.getElementById('password').value;
+
+      const res = await fetch('api/login.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ username, password })
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      const msgEl = document.getElementById('loginMessage');
+      if (res.ok && data.ok) {
+        // create client-side admin session so UI JS recognizes auth
+        localStorage.setItem('adminSession', JSON.stringify({ timestamp: Date.now(), user: username }));
+
+        msgEl.textContent = 'ورود با موفقیت انجام شد. همگام‌سازی داده‌ها...';
+        msgEl.className = 'success';
+
+        // fetch server data and store in localStorage keys used by DataManager
+        await syncServerData();
+
+        setTimeout(() => { window.location.href = 'admin.php'; }, 600);
+      } else {
+        let text = 'خطا در ورود';
+        if (res.status === 401 || data.message === 'user_not_found') text = 'نام کاربری یافت نشد';
+        else if (res.status === 403 || data.message === 'bad_credentials') text = 'نام کاربری یا رمز عبور نامعتبر است';
+        else if (res.status === 500) text = 'خطای داخلی سرور';
+        msgEl.textContent = text;
+        msgEl.className = '';
+      }
+    });
+  </script>
+</body>
+</html>
