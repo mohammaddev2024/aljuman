@@ -965,6 +965,18 @@ class PersianMagazine {
 // Initialize the magazine when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
     window.persianMagazine = new PersianMagazine();
+    
+    // Listen for cross-tab refresh signals
+    window.addEventListener('storage', (e) => {
+        if (e.key === 'forceRefresh' && window.persianMagazine) {
+            // Refresh current section to show updated data
+            if (window.persianMagazine.currentSection === 'home') {
+                window.persianMagazine.loadArticles();
+            } else if (window.persianMagazine.currentSection === 'favorites') {
+                window.persianMagazine.loadFavorites();
+            }
+        }
+    });
 });
 
 // Global functions for onclick handlers
