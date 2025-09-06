@@ -21,6 +21,46 @@ if ($method === 'POST') {
     exit;
 }
 
+// Handle PUT (update existing magazine)
+if ($method === 'PUT') {
+    try {
+        if (!is_array($input) || empty($input['id'])) {
+            http_response_code(400);
+            echo json_encode(['ok'=>false, 'error'=>'missing id']);
+            exit;
+        }
+
+        $id = $input['id'];
+        $fields = [];
+        $params = [];
+
+        if (array_key_exists('title', $input)) { $fields[] = 'title = ?'; $params[] = $input['title']; }
+        if (array_key_exists('month', $input)) { $fields[] = 'month = ?'; $params[] = $input['month']; }
+        if (array_key_exists('year', $input)) { $fields[] = 'year = ?'; $params[] = $input['year']; }
+        if (array_key_exists('description', $input)) { $fields[] = 'description = ?'; $params[] = $input['description']; }
+        if (array_key_exists('coverImage', $input)) { $fields[] = 'cover_image = ?'; $params[] = $input['coverImage']; }
+        if (array_key_exists('pdfUrl', $input)) { $fields[] = 'pdf_url = ?'; $params[] = $input['pdfUrl']; }
+
+        if (empty($fields)) {
+            http_response_code(400);
+            echo json_encode(['ok'=>false, 'error'=>'no fields to update']);
+            exit;
+        }
+
+        $params[] = $id;
+        $sql = 'UPDATE magazines SET ' . implode(', ', $fields) . ' WHERE id = ?';
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+
+        echo json_encode(['ok'=>true, 'id'=>$id]);
+        exit;
+    } catch (Exception $e) {
+        http_response_code(500);
+        echo json_encode(['ok'=>false, 'error' => 'update failed', 'details' => $e->getMessage()]);
+        exit;
+    }
+}
+
 if ($method === 'DELETE') {
     parse_str(file_get_contents('php://input'), $del);
     $id = $del['id'] ?? null;

@@ -61,33 +61,19 @@
 
     <script src="js/data.js"></script>
     <script>
-        document.addEventListener('DOMContentLoaded', async () => {
+        // Render magazines helper that can be called multiple times
+        function renderMagazinesList(magazines) {
             const magazinesGrid = document.getElementById('magazinesGrid');
             const emptyState = document.getElementById('magazineEmptyState');
             const defaultCover = 'https://images.pexels.com/photos/159711/books-bookstore-book-reading-159711.jpeg?auto=compress&cs=tinysrgb&w=400';
 
-            // Try server first
-            let magazines = [];
-            try {
-                const res = await fetch('api/magazines.php');
-                if (res.ok) {
-                    const json = await res.json();
-                    if (Array.isArray(json) && json.length > 0) magazines = json;
-                }
-            } catch (e) {
-                console.warn('خطا در دریافت لیست مجلات از سرور:', e);
-            }
-
-            // Fallback to local dataManager
-            if ((!magazines || magazines.length === 0) && window.dataManager) {
-                magazines = window.dataManager.getAllMagazines();
-            }
-
             if (!magazines || magazines.length === 0) {
-                emptyState.style.display = 'block';
+                if (magazinesGrid) magazinesGrid.innerHTML = '';
+                if (emptyState) emptyState.style.display = 'block';
                 return;
             }
 
+            if (emptyState) emptyState.style.display = 'none';
             magazinesGrid.innerHTML = '';
 
             magazines.forEach(magazine => {
@@ -155,7 +141,122 @@
 
                 magazinesGrid.appendChild(card);
             });
+        }
+
+        // Initial load: try server, then fallback to local
+        async function initialLoadMagazines() {
+            let magazines = [];
+            try {
+                const res = await fetch('api/magazines.php');
+                if (res.ok) {
+                    const json = await res.json().catch(() => null);
+                    if (Array.isArray(json) && json.length > 0) magazines = json;
+                }
+            } catch (e) {
+                console.warn('خطا در دریافت لیست مجلات از سرور:', e);
+            }
+
+            // Fallback to local dataManager if server returned nothing
+            if ((!magazines || magazines.length === 0) && window.dataManager) {
+                magazines = window.dataManager.getAllMagazines();
+            }
+
+            renderMagazinesList(magazines);
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initialLoadMagazines();
+
+            // React to dataManager events so page updates when async sync completes
+            try {
+                window.addEventListener('dataManager:initialized', (e) => {
+                    const mags = (e && e.detail && e.detail.magazines) ? e.detail.magazines : (window.dataManager ? window.dataManager.getAllMagazines() : []);
+                    renderMagazinesList(mags);
+                });
+
+                window.addEventListener('dataManager:magazinesUpdated', (e) => {
+                    const mags = (window.dataManager && window.dataManager.getAllMagazines) ? window.dataManager.getAllMagazines() : (Array.isArray(e && e.detail) ? e.detail : []);
+                    renderMagazinesList(mags);
+                });
+            } catch (err) { /* ignore */ }
         });
+    </script>
+
+    <script>
+        // Debug panel for diagnostics (only visible when something fails)
+        (function(){
+            function addDebugPanel() {
+                const panel = document.createElement('div');
+                panel.id = 'debugPanel';
+                panel.style.cssText = 'position:fixed;left:10px;bottom:10px;max-width:360px;max-height:40vh;overflow:auto;background:rgba(0,0,0,0.85);color:#fff;padding:12px;border-radius:8px;z-index:99999;font-size:13px;line-height:1.4;box-shadow:0 6px 24px rgba(0,0,0,0.4);';
+                panel.innerHTML = '<strong>Debug: magazines</strong><div id="debugContent" style="margin-top:8px;font-size:12px;color:#ddd"></div>';
+                document.body.appendChild(panel);
+            }
+
+            function debug(msg, obj) {
+                try { console.log('[magazines-debug]', msg, obj || ''); } catch(e){}
+                const el = document.getElementById('debugContent');
+                if (el) {
+                    const row = document.createElement('div');
+                    row.textContent = msg + (obj ? (" => " + (typeof obj === 'string' ? obj : JSON.stringify(obj))) : '');
+                    el.appendChild(row);
+                }
+            }
+
+            async function runDiagnostics() {
+                addDebugPanel();
+
+                // Show cookie and PHP session presence
+                debug('document.cookie', document.cookie || '(no cookies)');
+
+                // LocalStorage key content
+                try {
+                    const ls = localStorage.getItem('persianMagazineMagazines');
+                    debug('localStorage persianMagazineMagazines present', ls ? 'yes' : 'no');
+                    if (ls) {
+                        try { debug('localStorage length', JSON.parse(ls).length); } catch(e){ debug('localStorage parse error', e.message); }
+                    }
+                } catch(e) { debug('localStorage read error', e.message); }
+
+                // dataManager state if available
+                if (window.dataManager) {
+                    try {
+                        const dm = window.dataManager;
+                        debug('dataManager.magazines.length', Array.isArray(dm.magazines) ? dm.magazines.length : String(dm.magazines));
+                        debug('dataManager.getAllMagazines() length', Array.isArray(dm.getAllMagazines()) ? dm.getAllMagazines().length : 'n/a');
+                    } catch(e) { debug('dataManager read error', e.message); }
+                } else {
+                    debug('dataManager', 'not initialized yet');
+                }
+
+                // Try server fetch without credentials and with credentials
+                async function tryFetch(opts) {
+                    try {
+                        const res = await fetch('api/magazines.php', opts);
+                        const text = await res.text().catch(()=>null);
+                        debug('fetch (' + (opts && opts.credentials ? opts.credentials : 'no-credentials') + ') status', res.status + (res.ok ? ' OK' : ''));
+                        debug('fetch response body', text ? (text.length > 1000 ? text.slice(0,1000) + '... (truncated)' : text) : '(no body)');
+                    } catch (e) {
+                        debug('fetch error (' + (opts && opts.credentials ? opts.credentials : 'no-credentials') + ')', e.message);
+                    }
+                }
+
+                await tryFetch({});
+                await tryFetch({ credentials: 'same-origin' });
+
+                // If dataManager exists but magazines are empty, show hint
+                if (window.dataManager && Array.isArray(window.dataManager.magazines) && window.dataManager.magazines.length === 0) {
+                    debug('hint', 'dataManager.magazines is empty. If you added magazines in admin, ensure server-side POST succeeded and returned id. Check Network tab for POST to api/magazines.php.');
+                }
+
+                debug('done', 'Inspect Network/Console for more details.');
+            }
+
+            document.addEventListener('DOMContentLoaded', () => {
+                // run diagnostics after a short delay to allow dataManager.syncFromServer to run
+                setTimeout(() => runDiagnostics(), 800);
+            });
+        })();
     </script>
 </body>
 </html>

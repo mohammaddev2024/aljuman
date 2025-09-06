@@ -15,6 +15,18 @@ class PersianMagazine {
         this.updateFavoritesCount();
         // Apply site settings if available
         this.applySiteSettings();
+
+        // Ensure we fetch authoritative data from server after listeners are attached
+        try {
+            if (window.dataManager && typeof window.dataManager.syncFromServer === 'function') {
+                window.dataManager.syncFromServer().then(() => {
+                    // Re-render current section after server sync
+                    if (this.currentSection === 'home') this.loadArticles();
+                    if (this.currentSection === 'magazine') this.loadMagazines();
+                    if (this.currentSection === 'favorites') this.showFavorites();
+                }).catch(err => console.warn('خطا در syncFromServer از main.js:', err));
+            }
+        } catch (e) { /* ignore */ }
     }
 
     applySiteSettings() {
@@ -157,7 +169,6 @@ class PersianMagazine {
 
             window.addEventListener('dataManager:articlesUpdated', (e) => {
                 if (this.currentSection === 'home') this.loadArticles();
-                if (this.currentSection === 'favorites') this.loadFavorites();
                 this.updateFavoritesCount();
             });
 
@@ -177,6 +188,14 @@ class PersianMagazine {
             window.addEventListener('dataManager:syncComplete', (e) => {
                 // optional: visual indicator could be added
                 console.info('dataManager syncComplete', e.detail);
+                try {
+                    if (e && e.detail && e.detail.success) {
+                        // reload data for the active section so users see server updates immediately
+                        if (this.currentSection === 'home') this.loadArticles();
+                        if (this.currentSection === 'magazine') this.loadMagazines();
+                        if (this.currentSection === 'favorites') this.showFavorites();
+                    }
+                } catch (err) { console.warn('خطا در پردازش syncComplete:', err); }
             });
         } catch (err) { /* ignore */ }
     }
@@ -516,84 +535,78 @@ class PersianMagazine {
         });
     }
 
-    // Helper to resolve author photo to an absolute, usable URL or null when absent
-    normalizeAuthorPhoto(authorPhoto) {
-        try {
-            if (!authorPhoto || typeof authorPhoto !== 'string') return null;
-            let src = authorPhoto.trim();
-            if (!src) return null;
+    // Create a public-facing magazine card. Accepts either server schema (cover_image, pdf_url)
+    // or client schema (coverImage, pdfUrl) and normalizes values.
+    createMagazineCard(mag) {
+        const magazine = {
+            id: String(mag.id || mag.ID || mag.ID || ''),
+            title: mag.title || mag.name || '',
+            month: Number(mag.month || mag.month_number || mag.monthNumber || 0) || 0,
+            year: mag.year || mag.y || (mag.createdAt ? new Date(mag.createdAt).getFullYear() : ''),
+            description: mag.description || mag.body || '',
+            coverImage: (mag.coverImage || mag.cover_image || mag.cover || '').toString(),
+            pdfUrl: (mag.pdfUrl || mag.pdf_url || mag.pdf || '').toString(),
+            createdAt: mag.createdAt || mag.created_at || new Date().toISOString()
+        };
 
-            // data URI or absolute http(s)
-            if (/^(data:|https?:\/\/)/i.test(src)) return src;
+        const card = document.createElement('div');
+        card.className = 'magazine-card';
 
-            // Starts with project-relative slash (e.g. /assets/uploads/..)
-            if (/^\/assets\//i.test(src)) return window.location.origin + src;
+        const monthName = (window.dataManager && typeof window.dataManager.getMonthName === 'function') ? window.dataManager.getMonthName(magazine.month) : magazine.month;
 
-            // Starts with assets/uploads without leading slash
-            if (/^assets\/uploads\//i.test(src)) return window.location.origin + '/' + src.replace(/^\/+/, '');
+        // Only use cover if it is explicitly provided and resolves to a same-origin or project asset path
+        const resolvedCover = this.normalizeAuthorPhoto(magazine.coverImage);
 
-            // May contain ../ or ./ segments - normalize by taking basename
-            const parts = src.split(/[\\/]+/);
-            const filename = parts[parts.length - 1] || src;
-            return window.location.origin + '/assets/uploads/' + filename.replace(/^\/+/, '');
-        } catch (err) {
-            return null;
-        }
+        card.innerHTML = `
+            <div class="magazine-cover">
+                ${resolvedCover ? `<img src="${resolvedCover}" alt="${magazine.title}" loading="lazy">` : ''}
+            </div>
+            <div class="magazine-body">
+                <h3 class="magazine-title">${magazine.title}</h3>
+                <p class="magazine-meta">${monthName} ${magazine.year}</p>
+                <p class="magazine-desc">${magazine.description || ''}</p>
+                <div class="magazine-actions">
+                    ${magazine.pdfUrl ? `<a class="magazine-download" href="${magazine.pdfUrl}" target="_blank" rel="noopener">دانلود / مشاهده PDF</a>` : ''}
+                </div>
+            </div>
+        `;
+
+        // If image element exists, hide it on error instead of falling back to a placeholder
+        const imgEl = card.querySelector('.magazine-cover img');
+        if (imgEl) imgEl.onerror = function() { this.style.display = 'none'; };
+
+        return card;
     }
 
-    // Try to locate any plausible author-photo value inside the article object
-    getAuthorPhotoFromArticle(article) {
-        if (!article || typeof article !== 'object') return null;
-
-        const candidates = [];
-
-        // Common keys to check first
-        ['authorPhoto','author_photo','authorImage','author_image','avatar','photo','image','author_avatar'].forEach(k => {
-            if (article[k] && typeof article[k] === 'string') candidates.push(article[k]);
-        });
-
-        // Scan all string fields for anything that looks like an image or assets/uploads path
-        Object.keys(article).forEach(k => {
-            const v = article[k];
-            if (typeof v === 'string') {
-                if (/assets[\\/]+uploads|\\.(jpe?g|png|gif|webp|svg)($|\?)/i.test(v)) {
-                    candidates.push(v);
-                }
-            }
-        });
-
-        // Remove duplicates and falsy
-        const uniq = Array.from(new Set(candidates.filter(Boolean)));
-
-        // Prefer non-default images (avoid the known placeholder)
-        const defaultAvatar = 'https://images.pexels.com/photos/1043471/pexels-photo-1043471.jpeg?auto=compress&cs=tinysrgb&w=150';
-        const chosen = uniq.find(s => s.trim() && s.indexOf(defaultAvatar) === -1) || uniq[0] || null;
-
-        return chosen;
-    }
-
+    // Create article card including optional author avatar (only when explicitly provided)
     createArticleCard(article) {
         const card = document.createElement('div');
         card.className = 'article-card';
         card.addEventListener('click', () => this.openArticleModal(article));
 
-        // Resolve author photo: prefer specific fields or any candidate found inside the article
+        // Resolve author photo from common places (nested author object, common fields)
         const candidate = this.getAuthorPhotoFromArticle(article) || article.authorPhoto || article.author_photo || '';
-        let resolvedAuthorPhoto = this.normalizeAuthorPhoto(candidate); // may be null
+        const resolvedAuthorPhoto = this.normalizeAuthorPhoto(candidate); // may be null
 
-        // Add a conservative cache-buster only for same-origin images (avoid for data: or external CDN)
+        // Conservative cache-busting for same-origin images
         let imgSrc = resolvedAuthorPhoto;
         try {
-            if (resolvedAuthorPhoto && !/^data:/i.test(resolvedAuthorPhoto) && resolvedAuthorPhoto.startsWith(window.location.origin)) {
-                imgSrc = resolvedAuthorPhoto + '?v=' + (article._photoVersion || article.id || Date.now());
+            if (resolvedAuthorPhoto && !/^data:/i.test(resolvedAuthorPhoto)) {
+                const url = new URL(resolvedAuthorPhoto, window.location.href);
+                // Only append version for same-origin/local assets to avoid leaking dynamic query to external hosts
+                if (url.origin === window.location.origin) {
+                    imgSrc = url.href + (url.search ? '&' : '?') + 'v=' + (article._photoVersion || Date.now());
+                } else {
+                    imgSrc = url.href;
+                }
             }
         } catch (e) { imgSrc = resolvedAuthorPhoto; }
 
-        const formattedDate = window.dataManager.formatDate(article.createdAt);
-        const categoryLabel = window.dataManager.getCategoryLabel(article.category);
-        const excerptText = article.excerpt || (window.dataManager.generateExcerpt ? window.dataManager.generateExcerpt(article.content, 200) : '');
+        const formattedDate = (window.dataManager && typeof window.dataManager.formatDate === 'function') ? window.dataManager.formatDate(article.createdAt) : '';
+        const categoryLabel = (window.dataManager && typeof window.dataManager.getCategoryLabel === 'function') ? window.dataManager.getCategoryLabel(article.category) : '';
+        const excerptText = article.excerpt || (window.dataManager && window.dataManager.generateExcerpt ? window.dataManager.generateExcerpt(article.content, 200) : '');
 
-        // Build header: include image only when available
+        // Build header: include image only when explicitly resolved
         const header = document.createElement('div');
         header.className = 'card-header';
 
@@ -603,7 +616,7 @@ class PersianMagazine {
             img.loading = 'lazy';
             img.alt = article.author || '';
             img.src = imgSrc;
-            // on error hide the img element instead of showing default
+            // hide on error (do not show any placeholder)
             img.onerror = function() { this.style.display = 'none'; };
             header.appendChild(img);
         }
@@ -636,10 +649,84 @@ class PersianMagazine {
         card.appendChild(header);
         card.appendChild(content);
 
-        // image errors handled by individual img.onerror above
+        return card;
+    }
 
-         return card;
-     }
+    // Normalize a provided author/cover image value into a usable URL or null.
+    // Accepts: data: URIs, absolute http/https, project-relative (/assets/...), assets/uploads/..., or bare filenames.
+    normalizeAuthorPhoto(value) {
+        if (!value || typeof value !== 'string') return null;
+        const src = value.trim();
+        if (!src) return null;
+
+        // data URI
+        if (/^data:/i.test(src)) return src;
+
+        // absolute http(s)
+        if (/^https?:\/\//i.test(src)) return src;
+
+        // project-root absolute asset path
+        if (/^\//.test(src) && /\/assets\//.test(src)) {
+            try { return new URL(src, window.location.origin).href; } catch(e) { return null; }
+        }
+
+        // assets/uploads without leading slash
+        if (/^(assets\/uploads\/|uploads\/)/i.test(src)) {
+            try { return window.location.origin + '/' + src.replace(/^\/+/, ''); } catch(e) { return null; }
+        }
+
+        // bare filename -> assume assets/uploads
+        if (/^[^\/\\?#]+\.(jpe?g|png|gif|webp|svg)(\?.*)?$/i.test(src)) {
+            try { return window.location.origin + '/assets/uploads/' + src.replace(/^\/+/, ''); } catch(e) { return null; }
+        }
+
+        // If it's a relative path (./images/foo.jpg or ../foo.png), resolve against site origin
+        try {
+            const resolved = new URL(src, window.location.href).href;
+            return resolved;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    // Search common locations in the article object for an author image.
+    // Looks at nested author object and common field names, returns first resolvable URL.
+    getAuthorPhotoFromArticle(article) {
+        if (!article || typeof article !== 'object') return null;
+
+        // If there's a nested author object, check there first
+        if (article.author && typeof article.author === 'object') {
+            const a = article.author;
+            const nestedKeys = ['photo','avatar','image','photoUrl','photo_url','avatar_url','image_url'];
+            for (const k of nestedKeys) {
+                if (a[k] && typeof a[k] === 'string') {
+                    const r = this.normalizeAuthorPhoto(a[k]);
+                    if (r) return r;
+                }
+            }
+        }
+
+        // Common top-level fields
+        const keys = ['authorPhoto','author_photo','authorImage','author_image','avatar','photo','image','author_avatar','author_image_url','avatar_url'];
+        for (let i = 0; i < keys.length; i++) {
+            const k = keys[i];
+            if (article[k] && typeof article[k] === 'string') {
+                const r = this.normalizeAuthorPhoto(article[k]);
+                if (r) return r;
+            }
+        }
+
+        // Scan other string fields for likely image values but prefer only same-origin or assets paths
+        for (const k of Object.keys(article)) {
+            const v = article[k];
+            if (typeof v === 'string' && /\.(jpe?g|png|gif|webp|svg)(\?.*)?$/i.test(v)) {
+                const r = this.normalizeAuthorPhoto(v);
+                if (r) return r;
+            }
+        }
+
+        return null;
+    }
 
     openArticleModal(article) {
         const modal = document.getElementById('articleModal');
@@ -654,20 +741,12 @@ class PersianMagazine {
         const authorCandidate = this.getAuthorPhotoFromArticle(article) || article.authorPhoto || article.author_photo || '';
         const authorImg = this.normalizeAuthorPhoto(authorCandidate);
 
-        // Add cache buster for modal image too
-        let modalImgSrc = authorImg;
-        try {
-            if (authorImg && !/^data:/i.test(authorImg) && authorImg.startsWith(window.location.origin)) {
-                modalImgSrc = authorImg + '?v=' + (article._photoVersion || article.id || Date.now());
-            }
-        } catch (e) { modalImgSrc = authorImg; }
-
         // Build modal content dynamically so we can omit the image when not available
         const headerHtml = `
             <div class="modal-article-header">
                 <h1 class="modal-article-title">${article.title}</h1>
                 <div class="modal-article-meta">
-                ${modalImgSrc ? `<img src="${modalImgSrc}" alt="${article.author}" class="author-avatar">` : ''}
+                ${authorImg ? `<img src="${authorImg}" alt="${article.author}" class="author-avatar">` : ''}
                     <div class="author-info">
                         <h4>${article.author}</h4>
                         <span class="article-date">${formattedDate}</span>
@@ -921,7 +1000,7 @@ class PersianMagazine {
     }
 
     updateFavoritesCount() {
-        const favoritesCount = document.querySelector('.favorites-filter-btn .favorites-count');
+        const favoritesCount = document.querySelector('.favorites-filter-btn .favorites.count');
         const count = window.dataManager.getFavorites().length;
         
         if (favoritesCount) {
@@ -965,18 +1044,6 @@ class PersianMagazine {
 // Initialize the magazine when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
     window.persianMagazine = new PersianMagazine();
-    
-    // Listen for cross-tab refresh signals
-    window.addEventListener('storage', (e) => {
-        if (e.key === 'forceRefresh' && window.persianMagazine) {
-            // Refresh current section to show updated data
-            if (window.persianMagazine.currentSection === 'home') {
-                window.persianMagazine.loadArticles();
-            } else if (window.persianMagazine.currentSection === 'favorites') {
-                window.persianMagazine.loadFavorites();
-            }
-        }
-    });
 });
 
 // Global functions for onclick handlers

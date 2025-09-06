@@ -52,16 +52,12 @@ class DataManager {
         const newArticle = {
             id: Date.now().toString(),
             ...articleData,
-            _photoVersion: Date.now(), // for cache busting
             excerpt: this.generateExcerpt(articleData.content, 200),
             createdAt: new Date().toISOString()
         };
         
         this.articles.unshift(newArticle);
         this.saveArticles();
-
-        // Notify UI to refresh
-        this.notifyUpdate('articles');
 
         // Background sync to server
         try {
@@ -112,20 +108,12 @@ class DataManager {
                 }
             });
 
-            // Add photo version for cache busting when author photo changes
-            if (updatedData.authorPhoto && updatedData.authorPhoto !== existing.authorPhoto) {
-                updated._photoVersion = Date.now();
-            }
-
             // Recompute excerpt if content changed
             updated.excerpt = updated.content ? this.generateExcerpt(updated.content, 200) : existing.excerpt;
 
             // Replace single index (no shared references)
             this.articles[index] = updated;
             this.saveArticles();
-
-            // Notify UI to refresh
-            this.notifyUpdate('articles');
 
             console.debug('DataManager.updateArticle:', { id, updatedAuthorPhoto: updated.authorPhoto, index });
 
@@ -242,45 +230,51 @@ class DataManager {
         return this.magazines.find(magazine => magazine.id === id);
     }
 
-    addMagazine(magazineData) {
+    addMagazine(magazineData, opts = { skipServerSync: false, id: null }) {
+        const idToUse = opts.id || Date.now().toString();
         const newMagazine = {
-            id: Date.now().toString(),
+            id: idToUse,
             ...magazineData,
             createdAt: new Date().toISOString()
         };
         
         this.magazines.unshift(newMagazine);
         this.saveMagazines();
+        // Notify UI that magazines changed so pages listening to events (main.js) update immediately
+        try { this.notifyUpdate('magazines'); } catch(e){}
 
-        // Background sync to server
-        try {
-            fetch('api/magazines.php', {
-                method: 'POST',
-                credentials: 'same-origin',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    title: newMagazine.title,
-                    month: newMagazine.month,
-                    year: newMagazine.year,
-                    description: newMagazine.description,
-                    coverImage: newMagazine.coverImage,
-                    pdfUrl: newMagazine.pdfUrl
-                })
-            }).then(async res => {
-                if (res.ok) {
-                    const data = await res.json().catch(() => null);
-                    if (data && data.id) {
-                        const idx = this.magazines.findIndex(m => m.id === newMagazine.id);
-                        if (idx !== -1) {
-                            this.magazines[idx].id = String(data.id);
-                            this.saveMagazines();
+        // Background sync to server (only if not explicitly skipped)
+        if (!opts.skipServerSync) {
+            try {
+                fetch('api/magazines.php', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: newMagazine.title,
+                        month: newMagazine.month,
+                        year: newMagazine.year,
+                        description: newMagazine.description,
+                        coverImage: newMagazine.coverImage,
+                        pdfUrl: newMagazine.pdfUrl
+                    })
+                }).then(async res => {
+                    if (res.ok) {
+                        const data = await res.json().catch(() => null);
+                        if (data && data.id) {
+                            const idx = this.magazines.findIndex(m => m.id === newMagazine.id);
+                            if (idx !== -1) {
+                                this.magazines[idx].id = String(data.id);
+                                this.saveMagazines();
+                                try { this.notifyUpdate('magazines'); } catch(e){}
+                            }
                         }
+                    } else {
+                        console.warn('سرور: افزودن مجله موفق نبود', res.status);
                     }
-                } else {
-                    console.warn('سرور: افزودن مجله موفق نبود', res.status);
-                }
-            }).catch(err => console.warn('خطا در ارسال مجله به سرور:', err));
-        } catch (e) { console.warn('خطا در همگام‌سازی مجله:', e); }
+                }).catch(err => console.warn('خطا در ارسال مجله به سرور:', err));
+            } catch (e) { console.warn('خطا در همگام‌سازی مجله:', e); }
+        }
 
         return newMagazine;
     }
@@ -290,6 +284,8 @@ class DataManager {
         if (index !== -1) {
             const deleted = this.magazines.splice(index, 1)[0];
             this.saveMagazines();
+            // Notify UI that magazines changed
+            try { this.notifyUpdate('magazines'); } catch(e){}
 
             // Background delete on server
             try {
@@ -306,6 +302,77 @@ class DataManager {
             return deleted;
         }
         return null;
+    }
+
+    // Update an existing magazine locally and optionally on server
+    updateMagazine(id, updatedData, opts = { skipServerSync: false }) {
+        const index = this.magazines.findIndex(m => m.id === id);
+        if (index === -1) return null;
+
+        const existing = this.magazines[index];
+        const updated = Object.assign({}, existing);
+
+        const updatableFields = ['title','month','year','description','coverImage','pdfUrl'];
+        updatableFields.forEach(f => {
+            if (Object.prototype.hasOwnProperty.call(updatedData, f)) {
+                updated[f] = updatedData[f];
+            }
+        });
+
+        // Replace and persist
+        this.magazines[index] = updated;
+        this.saveMagazines();
+        try { this.notifyUpdate('magazines'); } catch(e){}
+
+        // Background server update (if not opted out)
+        if (!opts.skipServerSync) {
+            try {
+                const payload = {
+                    id: id,
+                    title: updated.title,
+                    month: updated.month,
+                    year: updated.year,
+                    description: updated.description,
+                    coverImage: updated.coverImage,
+                    pdfUrl: updated.pdfUrl
+                };
+
+                fetch('api/magazines.php', {
+                    method: 'PUT',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                }).then(async res => {
+                    if (res.status === 401) {
+                        console.warn('سرور: نیاز به احراز هویت برای به‌روزرسانی مجله (401)');
+                        try { window.dispatchEvent(new CustomEvent('dataManager:authRequired', { detail: { resource: 'magazines' } })); } catch(e){}
+                        return;
+                    }
+
+                    if (res.ok) {
+                        const data = await res.json().catch(() => null);
+                        // if server returns a new id mapping, update local id
+                        if (data && data.id) {
+                            const idx = this.magazines.findIndex(m => m.id === id);
+                            if (idx !== -1) {
+                                this.magazines[idx].id = String(data.id);
+                                this.saveMagazines();
+                                try { this.notifyUpdate('magazines'); } catch(e){}
+                            }
+                        }
+
+                        // Re-sync from server to ensure we show authoritative data
+                        try {
+                            await this.syncFromServer();
+                        } catch (e) { console.warn('خطا در همگام‌سازی بعد از به‌روزرسانی مجله:', e); }
+                    } else {
+                        console.warn('سرور: به‌روزرسانی مجله موفق نبود', res.status);
+                    }
+                }).catch(err => console.warn('خطا در ارسال به‌روزرسانی مجله به سرور:', err));
+            } catch (e) { console.warn('خطا در همگام‌سازی به‌روزرسانی مجله:', e); }
+        }
+
+        return this.magazines[index];
     }
 
     // Statistics

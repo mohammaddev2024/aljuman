@@ -449,7 +449,7 @@ class DatabaseManager {
                     id: '1',
                     title: 'آینده هوش مصنوعی در ایران',
                     author: 'دکتر علی محمدی',
-                    authorPhoto: 'https://images.pexels.com/photos/2379005/pexels-photo-2379005.jpeg?auto=compress&cs=tinysrgb&w=150',
+                    authorPhoto: '',
                     category: 'technology',
                     tags: ['هوش مصنوعی', 'فناوری', 'ایران'],
                     content: `
@@ -468,7 +468,7 @@ class DatabaseManager {
                     id: '2',
                     title: 'هنر معاصر ایران و جهانی شدن',
                     author: 'استاد مریم حسینی',
-                    authorPhoto: 'https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=150',
+                    authorPhoto: '',
                     category: 'art',
                     tags: ['هنر معاصر', 'ایران', 'جهانی سازی'],
                     content: `
@@ -485,7 +485,7 @@ class DatabaseManager {
                     id: '3',
                     title: 'فرهنگ غذایی ایران در قرن نوزدهم',
                     author: 'پروفسور رضا کریمی',
-                    authorPhoto: 'https://images.pexels.com/photos/1222271/pexels-photo-1222271.jpeg?auto=compress&cs=tinysrgb&w=150',
+                    authorPhoto: '',
                     category: 'culture',
                     tags: ['فرهنگ', 'غذا', 'تاریخ', 'ایران'],
                     content: `
@@ -510,7 +510,7 @@ class DatabaseManager {
                     month: 11,
                     year: 1403,
                     description: 'اولین شماره مجله فرهنگی نور با محوریت فناوری و هنر معاصر',
-                    coverImage: 'https://images.pexels.com/photos/159711/books-bookstore-book-reading-159711.jpeg?auto=compress&cs=tinysrgb&w=400',
+                    coverImage: '',
                     pdfUrl: '#',
                     createdAt: new Date('2024-02-01').toISOString()
                 }

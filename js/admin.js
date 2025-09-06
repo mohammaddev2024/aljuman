@@ -3,6 +3,7 @@ class AdminPanel {
     constructor() {
         this.currentTab = 'add';
         this.editingArticleId = null;
+        this.editingMagazineId = null; // track which magazine is being edited (null when adding)
         this.init();
     }
 
@@ -117,6 +118,13 @@ class AdminPanel {
         // Magazine events
         this.setupMagazineEvents();
 
+        // Listen for authentication-required events from data manager
+        try {
+            window.addEventListener('dataManager:authRequired', (e) => {
+                this.showMessage('عملیات نیاز به ورود به سرور دارد؛ لطفاً وارد شوید (login.html)', 'error');
+            });
+        } catch(e) {}
+        
         // Logout
         const logoutBtn = document.getElementById('adminLogout');
         if (logoutBtn) {
@@ -234,9 +242,7 @@ class AdminPanel {
             this.showMessage('مقاله با موفقیت اضافه شد', 'success');
             e.target.reset();
             if (this.quill) this.quill.setContents([]);
-            // Clear image previews
-            const authorPreview = document.getElementById('authorPhotoPreview');
-            if (authorPreview) authorPreview.src = '';
+            const featuredPreview = document.getElementById('featuredPreview'); if (featuredPreview) featuredPreview.innerHTML = '';
             
             // Update manage tab if it's visible
             if (this.currentTab === 'manage') {
@@ -337,15 +343,6 @@ class AdminPanel {
         document.getElementById('editCategory').value = article.category;
         document.getElementById('editTags').value = article.tags.join(', ');
         
-        // Show existing author photo with cache buster
-        const editAuthorPreview = document.getElementById('editAuthorPhotoPreview');
-        if (editAuthorPreview && article.authorPhoto) {
-            editAuthorPreview.src = article.authorPhoto + '?v=' + (article._photoVersion || Date.now());
-            editAuthorPreview.style.display = 'block';
-        } else if (editAuthorPreview) {
-            editAuthorPreview.style.display = 'none';
-        }
-        
         // Populate Quill editor with existing HTML
         if (this.editQuill) {
             this.editQuill.root.innerHTML = article.content || '';
@@ -385,11 +382,6 @@ class AdminPanel {
             this.showMessage('مقاله با موفقیت به‌روزرسانی شد', 'success');
             this.closeEditModal();
             this.loadManageArticles();
-            
-            // Force refresh of main page if it's open in another tab
-            try {
-                localStorage.setItem('forceRefresh', Date.now().toString());
-            } catch (e) {}
         } catch (error) {
             console.error('Error updating article:', error);
             this.showMessage('خطا در به‌روزرسانی مقاله', 'error');
@@ -470,6 +462,10 @@ class AdminPanel {
                         <i class="fas fa-eye"></i>
                         مشاهده
                     </button>
+                    <button class="edit-magazine-btn" onclick="adminPanel.editMagazine('${magazine.id}')">
+                        <i class="fas fa-edit"></i>
+                        ویرایش
+                    </button>
                     <button class="delete-magazine-btn" onclick="adminPanel.deleteMagazine('${magazine.id}')">
                         <i class="fas fa-trash"></i>
                     </button>
@@ -480,11 +476,16 @@ class AdminPanel {
         return card;
     }
 
+    // Open magazine modal for adding a new magazine
     openMagazineModal() {
         const magazineModal = document.getElementById('magazineModal');
         if (magazineModal) {
             magazineModal.classList.add('active');
             document.body.style.overflow = 'hidden';
+            // Update modal header depending on mode
+            const header = document.querySelector('#magazineModal .modal-header h3');
+            if (header && this.editingMagazineId) header.textContent = 'ویرایش شماره مجله';
+            if (header && !this.editingMagazineId) header.textContent = 'افزودن شماره جدید مجله';
         }
     }
 
@@ -494,6 +495,14 @@ class AdminPanel {
             magazineModal.classList.remove('active');
             document.body.style.overflow = 'auto';
             document.getElementById('magazineForm').reset();
+            // reset preview fields
+            try { document.getElementById('magazineCoverPreview').src = ''; } catch(e){}
+            try { document.getElementById('magazinePdfName').textContent = ''; } catch(e){}
+            // clear editing state
+            this.editingMagazineId = null;
+            // restore header text
+            const header = document.querySelector('#magazineModal .modal-header h3');
+            if (header) header.textContent = 'افزودن شماره جدید مجله';
         }
     }
 
@@ -511,18 +520,85 @@ class AdminPanel {
         };
 
         try {
-            window.dataManager.addMagazine(magazineData);
-            this.showMessage('شماره جدید مجله با موفقیت اضافه شد', 'success');
+            if (this.editingMagazineId) {
+                // Update existing magazine and wait for server sync
+                await window.dataManager.updateMagazine(this.editingMagazineId, magazineData);
+                this.showMessage('شماره مجله با موفقیت به‌روزرسانی شد', 'success');
+            } else {
+                // Try server-first add so we get authoritative id
+                let createdId = null;
+                try {
+                    const res = await fetch('api/magazines.php', {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(magazineData)
+                    });
+                    if (res.status === 401) {
+                        // Not authenticated on server — fallback to local only
+                        this.showMessage('برای ذخیره روی سرور ابتدا وارد شوید. شماره به‌صورت محلی ذخیره شد.', 'error');
+                    }
+                    if (res.ok) {
+                        const data = await res.json().catch(() => null);
+                        if (data && data.id) createdId = String(data.id);
+                    } else {
+                        console.warn('سرور: افزودن مجله موفق نبود', res.status);
+                    }
+                } catch (err) {
+                    console.warn('خطا در ارسال مجله به سرور:', err);
+                }
+
+                if (createdId) {
+                    // Add locally with the server id and prevent background duplicate sync
+                    window.dataManager.addMagazine(magazineData, { skipServerSync: true, id: createdId });
+                } else {
+                    // No server id — save locally and allow background sync attempt
+                    window.dataManager.addMagazine(magazineData);
+                }
+
+                this.showMessage('شماره جدید مجله با موفقیت اضافه شد', 'success');
+            }
+
             this.closeMagazineModal();
+            // Reload magazines from local store (syncFromServer may update shortly)
             this.loadMagazines();
             this.updateStats();
         } catch (error) {
-            console.error('Error adding magazine:', error);
-            this.showMessage('خطا در افزودن شماره مجله', 'error');
+            console.error('Error adding/updating magazine:', error);
+            this.showMessage('خطا در افزودن/به‌روزرسانی شماره مجله', 'error');
         }
     }
 
-    deleteMagazine(magazineId) {
+    // Edit an existing magazine - open modal and prefill
+    editMagazine(magazineId) {
+        const magazine = window.dataManager.getMagazineById(magazineId);
+        if (!magazine) return;
+
+        this.editingMagazineId = magazineId;
+
+        // Prefill fields
+        try { document.getElementById('magazineTitle').value = magazine.title || ''; } catch(e){}
+        try { document.getElementById('magazineMonth').value = magazine.month || ''; } catch(e){}
+        try { document.getElementById('magazineYear').value = magazine.year || ''; } catch(e){}
+        try { document.getElementById('magazineDescription').value = magazine.description || ''; } catch(e){}
+        try { document.getElementById('magazineCover').value = magazine.coverImage || ''; } catch(e){}
+        try { document.getElementById('magazinePdf').value = magazine.pdfUrl || ''; } catch(e){}
+
+        // Update previews
+        const coverPreview = document.getElementById('magazineCoverPreview');
+        if (coverPreview) coverPreview.src = magazine.coverImage || '';
+        const pdfNameEl = document.getElementById('magazinePdfName');
+        if (pdfNameEl) pdfNameEl.textContent = (magazine.pdfUrl || '').split('/').pop() || '';
+
+        // Update modal header
+        const header = document.querySelector('#magazineModal .modal-header h3');
+        if (header) header.textContent = 'ویرایش شماره مجله';
+
+        // Open modal
+        this.openMagazineModal();
+    }
+
+    async deleteMagazine(magazineId) {
         const magazine = window.dataManager.getMagazineById(magazineId);
         if (!magazine) return;
 
@@ -582,7 +658,7 @@ class AdminPanel {
     }
 
     handleLogout() {
-        const confirmed = confirm('آیا مطمئن هستید که می‌خواهید خارج شوید؟');
+        const confirmed = confirm('آیا مطمئن هستید که خارج شوید؟');
         if (confirmed) {
             window.dataManager.adminLogout();
             window.location.href = 'index.html';
@@ -678,11 +754,16 @@ class AdminPanel {
                     const res = await fetch('api/upload.php', { method: 'POST', body: form });
                     const json = await res.json();
                     if (json && json.url) {
-                        coverUrlInput.value = json.url;
-                        if (coverPreview) {
-                            coverPreview.src = json.url + '?v=' + Date.now();
-                            coverPreview.style.display = 'block';
-                        }
+                        // normalize final URL to absolute same-origin when possible
+                        let finalUrl = json.url;
+                        try {
+                            if (!/^https?:\/\//i.test(finalUrl)) {
+                                finalUrl = window.location.origin + '/' + finalUrl.replace(/^\/+/, '');
+                            }
+                        } catch (e) { /* fallback to returned url */ }
+
+                        coverUrlInput.value = finalUrl;
+                        if (coverPreview) coverPreview.src = finalUrl;
                         this.showToast('تصویر جلد آپلود و قرار داده شد');
                     } else {
                         this.showToast('خطا در آپلود تصویر');
@@ -693,23 +774,8 @@ class AdminPanel {
                 }
             });
         }
-        
-        // Show preview for existing cover URL
-        if (coverUrlInput && coverPreview) {
-            coverUrlInput.addEventListener('input', () => {
-                if (coverUrlInput.value) {
-                    coverPreview.src = coverUrlInput.value + '?v=' + Date.now();
-                    coverPreview.style.display = 'block';
-                } else {
-                    coverPreview.style.display = 'none';
-                }
-            });
-            // Initial load
-            if (coverUrlInput.value) {
-                coverPreview.src = coverUrlInput.value + '?v=' + Date.now();
-                coverPreview.style.display = 'block';
-            }
-        }
+        // if a cover URL already exists (e.g., editing), show preview
+        try { if (coverPreview && coverUrlInput && coverUrlInput.value) coverPreview.src = coverUrlInput.value; } catch(e){}
 
         // Magazine PDF upload
         const pdfInput = document.getElementById('magazinePdfFile');
@@ -725,7 +791,14 @@ class AdminPanel {
                     const res = await fetch('api/upload.php', { method: 'POST', body: form });
                     const json = await res.json();
                     if (json && json.url) {
-                        pdfUrlInput.value = json.url;
+                        let finalUrl = json.url;
+                        try {
+                            if (!/^https?:\/\//i.test(finalUrl)) {
+                                finalUrl = window.location.origin + '/' + finalUrl.replace(/^\/+/, '');
+                            }
+                        } catch (e) { /* fallback to returned url */ }
+
+                        pdfUrlInput.value = finalUrl;
                         if (pdfNameEl) pdfNameEl.textContent = file.name;
                         this.showToast('فایل PDF آپلود و قرار داده شد');
                     } else {
@@ -753,11 +826,14 @@ class AdminPanel {
                     const res = await fetch('api/upload.php', { method: 'POST', body: form });
                     const json = await res.json();
                     if (json && json.url) {
-                        editAuthorUrl.value = json.url;
-                        if (editAuthorPreview) {
-                            editAuthorPreview.src = json.url + '?v=' + Date.now();
-                            editAuthorPreview.style.display = 'block';
-                        }
+                        let finalUrl = json.url;
+                        try {
+                            if (!/^https?:\/\//i.test(finalUrl)) {
+                                finalUrl = window.location.origin + '/' + finalUrl.replace(/^\/+/, '');
+                            }
+                        } catch (e) { /* fallback */ }
+                        editAuthorUrl.value = finalUrl;
+                        if (editAuthorPreview) editAuthorPreview.src = finalUrl;
                         this.showToast('تصویر نویسنده آپلود شد');
                     } else {
                         this.showToast('خطا در آپلود تصویر نویسنده');
@@ -768,18 +844,7 @@ class AdminPanel {
                 }
             });
         }
-        
-        // Show preview for existing author photo URL in edit modal
-        if (editAuthorUrl && editAuthorPreview) {
-            editAuthorUrl.addEventListener('input', () => {
-                if (editAuthorUrl.value) {
-                    editAuthorPreview.src = editAuthorUrl.value + '?v=' + Date.now();
-                    editAuthorPreview.style.display = 'block';
-                } else {
-                    editAuthorPreview.style.display = 'none';
-                }
-            });
-        }
+        try { if (editAuthorPreview && editAuthorUrl && editAuthorUrl.value) editAuthorPreview.src = editAuthorUrl.value; } catch(e){}
 
         // Author photo upload in article editor (if present)
         const authorPhotoInput = document.getElementById('authorPhotoFile');
@@ -796,11 +861,14 @@ class AdminPanel {
                     const res = await fetch('api/upload.php', { method: 'POST', body: form });
                     const json = await res.json();
                     if (json && json.url) {
-                        authorPhotoUrl.value = json.url;
-                        if (authorPreview) {
-                            authorPreview.src = json.url + '?v=' + Date.now();
-                            authorPreview.style.display = 'block';
-                        }
+                        let finalUrl = json.url;
+                        try {
+                            if (!/^https?:\/\//i.test(finalUrl)) {
+                                finalUrl = window.location.origin + '/' + finalUrl.replace(/^\/+/, '');
+                            }
+                        } catch (e) { /* fallback */ }
+                        authorPhotoUrl.value = finalUrl;
+                        if (authorPreview) authorPreview.src = finalUrl;
                         this.showToast('تصویر نویسنده آپلود شد');
                     } else {
                         this.showToast('خطا در آپلود تصویر نویسنده');
@@ -811,54 +879,8 @@ class AdminPanel {
                 }
             });
         }
-        
-        // Show preview for existing author photo URL
-        if (authorPhotoUrl && authorPreview) {
-            authorPhotoUrl.addEventListener('input', () => {
-                if (authorPhotoUrl.value) {
-                    authorPreview.src = authorPhotoUrl.value + '?v=' + Date.now();
-                    authorPreview.style.display = 'block';
-                } else {
-                    authorPreview.style.display = 'none';
-                }
-            });
-            // Initial load
-            if (authorPhotoUrl.value) {
-                authorPreview.src = authorPhotoUrl.value + '?v=' + Date.now();
-                authorPreview.style.display = 'block';
-            }
-        }
+        try { if (authorPreview && authorPhotoUrl && authorPhotoUrl.value) authorPreview.src = authorPhotoUrl.value; } catch(e){}
     }
-    showToast(message) {
-        // Create toast notification
-        const toast = document.createElement('div');
-        toast.className = 'toast';
-        toast.textContent = message;
-        toast.style.cssText = `
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            background: var(--primary-color);
-            color: white;
-            padding: 12px 24px;
-            border-radius: 8px;
-            z-index: 10000;
-            animation: slideInRight 0.3s ease;
-            font-family: 'peyda', 'Vazirmatn', sans-serif;
-        `;
-
-        document.body.appendChild(toast);
-
-        setTimeout(() => {
-            toast.style.animation = 'slideOutRight 0.3s ease forwards';
-            setTimeout(() => {
-                if (document.body.contains(toast)) {
-                    document.body.removeChild(toast);
-                }
-            }, 300);
-        }, 3000);
-    }
-
 }
 
 // Make functions globally available for onclick handlers
